@@ -6,7 +6,7 @@
 #   nu builder.nu publish          sign, repo-add/remove, upload, delete stale files
 #
 # Env: BUILDER_CONFIG (default ./config.toml), WORK (default ./work), REMOTE (overrides config),
-#      RCLONE_CONFIG (read by rclone), SIGNING_KEY (path to the sq secret key, publish only).
+#      RCLONE_CONFIG / RCLONE_CONFIG_<NAME>_* (read by rclone), SIGNING_KEY (path to the sq secret key, publish only).
 
 use lib.nu *
 

@@ -52,7 +52,7 @@ Packages sit under a distro folder (`archlinux/`), so other distros can go next 
    sq --home=none key delete --cert-file signing.key --output keys/repo.pgp
    ```
    Commit `keys/repo.pgp`. Put the contents of `signing.key` in the `SIGNING_KEY` repository secret (armored text is fine). Keep `signing.key` and `signing.rev` somewhere safe, not in the repo. sq keys expire after 3 years by default (`--expiration` changes that). `publish` refuses to run if the key doesn't match `keys/repo.pgp`.
-2. **rclone**: set up a remote locally (`rclone config`), then put the relevant section of `~/.config/rclone/rclone.conf` in the `RCLONE_CONFIG` secret. Set `remote` in `config.toml` to `<name>:<path>`. Any backend works (sftp, s3, webdav, ...).
+2. **Storage** (Backblaze B2): create a bucket and an application key restricted to it (read and write). Put the key ID in the `B2_KEY_ID` secret and the key in `B2_APPLICATION_KEY`. Set `remote` in `config.toml` to `repo:<bucket>`. The workflow defines the rclone remote `repo` with `RCLONE_CONFIG_REPO_*` env vars on the `plan` and `publish` steps only, so build jobs never see the key. It sets `hard_delete`, so stale packages are deleted rather than hidden. Overwriting `myrepo.db` and friends still keeps old versions, so set the bucket's lifecycle to keep only the last version. Another backend works too: change the `RCLONE_CONFIG_REPO_*` vars in `build.yml` (see `rclone help backend <name>` for the options; passwords must be `rclone obscure`d).
 3. **Images**: push to `master`, or run the `images` workflow manually. It publishes `ghcr.io/<owner>/<repo>-archlinux:{x86_64,aarch64}`. The aarch64 image is built from the Arch aarch64 port bootstrap on arch-linux-repo.drzee.net. A target's `image` in `config.toml` must be one of those tags.
 4. Edit `config.toml` (repo name, targets, sources), push, and run `build`.
 
@@ -60,15 +60,21 @@ GitHub's `ubuntu-24.04-arm` runners are free for public repositories. They're Ne
 
 ## Client
 
+The repo signing key is:
+
+```
+56DBB6BB201CDE8366A429B4A58ED0FA6862DD8C
+```
+
+It's an Ed25519 key that signs with its subkey `C81A483D0247BB219ED3AC0771C2FDDD500CB5FF`, and it expires on 2029-11-23. A copy is in [keys/repo.pgp](keys/repo.pgp).
+
 ```bash
 curl -O https://pkgs.fermino.me/repo.pgp
-```
-```bash
 sudo pacman-key --add repo.pgp
+sudo pacman-key --lsign-key 56DBB6BB201CDE8366A429B4A58ED0FA6862DD8C
 ```
-```bash
-sudo pacman-key --lsign-key "$(sq --home=none inspect repo.pgp | sed -n 's/.*Fingerprint: //p' | head -1)"
-```
+
+pacman only trusts the fingerprint you lsign, so a swapped `repo.pgp` on the host can't make another key trusted. If the key is ever replaced, update the fingerprint here.
 
 ```ini
 # /etc/pacman.conf
@@ -98,7 +104,13 @@ RUSTFLAGS="$RUSTFLAGS -C target-cpu=x86-64-v3"
 
 ## Running locally
 
-`plan` and `publish` run anywhere with nu, git, rclone, sqv/sq and pacman's `repo-add`. `remote` can be a plain path, so an `rclone mount` works too:
+`plan` and `publish` run anywhere with nu, git, rclone, sqv/sq and pacman's `repo-add`. The `repo` remote can come from your own `rclone.conf` or from the same env vars as CI (`in-builder.sh` passes every `RCLONE_*` variable into the container):
+
+```bash
+export RCLONE_CONFIG_REPO_TYPE=b2 RCLONE_CONFIG_REPO_ACCOUNT=<key id> RCLONE_CONFIG_REPO_KEY=<key>
+```
+
+`remote` can also be a plain path, so an `rclone mount` works too:
 
 ```bash
 rclone mount myhost:/srv/pacman /mnt/pacman --daemon

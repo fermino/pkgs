@@ -31,13 +31,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-      - name: Secrets
-        env:
-          RCLONE_CONF: ${{ secrets.RCLONE_CONFIG }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/secrets"
-          printf '%s\n' "$RCLONE_CONF" > "$RUNNER_TEMP/secrets/rclone.conf"
       - id: plan
+        env:
+          RCLONE_CONFIG_REPO_TYPE: b2
+          RCLONE_CONFIG_REPO_ACCOUNT: ${{ secrets.B2_KEY_ID }}
+          RCLONE_CONFIG_REPO_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          RCLONE_CONFIG_REPO_HARD_DELETE: 'true'
         run: |
           ./in-builder.sh x86_64 nu builder.nu plan ${{ inputs.force && '--force' || '' }}
           echo "matrix=$(cat work/matrix.json)" >> "$GITHUB_OUTPUT"
@@ -95,10 +94,13 @@ jobs:
       - run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Secrets
         env:
-          RCLONE_CONF: ${{ secrets.RCLONE_CONFIG }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
           mkdir -p "$RUNNER_TEMP/secrets"
-          printf '%s\n' "$RCLONE_CONF" > "$RUNNER_TEMP/secrets/rclone.conf"
           printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/secrets/signing.key"
       - run: ./in-builder.sh x86_64 nu builder.nu publish
+        env:
+          RCLONE_CONFIG_REPO_TYPE: b2
+          RCLONE_CONFIG_REPO_ACCOUNT: ${{ secrets.B2_KEY_ID }}
+          RCLONE_CONFIG_REPO_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          RCLONE_CONFIG_REPO_HARD_DELETE: 'true'

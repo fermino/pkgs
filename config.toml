@@ -1,9 +1,10 @@
 # pacman repo name: clients use [myrepo], files are myrepo.db, myrepo.files, ...
 repo = "myrepo"
 
-# rclone remote:path (from the RCLONE_CONFIG secret), or a plain local path.
+# rclone remote:path, or a plain local path. CI defines the `repo` remote as B2 (see build.yml),
+# so this is repo:<bucket>.
 # Packages go to <remote>/archlinux/<target>/
-remote = "repo:pacman"
+remote = "repo:pkgs.fermino.me"
 
 # Optional public base URL of <remote>/archlinux. If set, build jobs add the hosted repo to
 # pacman.conf so a package can depend on one built in an earlier run.
