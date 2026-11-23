@@ -43,6 +43,10 @@ RUN <<EOT
         sequoia-sq sequoia-sqv sequoia-chameleon-gnupg
 EOT
 
+# Stock makepkg.conf leaves MAKEFLAGS unset, so make would run serially. Sourced by makepkg
+# at build time, so nproc is the runner's. Targets' 50-target.conf can still override it.
+RUN echo 'MAKEFLAGS="-j$(nproc)"' > /etc/makepkg.conf.d/00-jobs.conf
+
 # Sequoia stands in for GnuPG in makepkg (validpgpkeys checks). builder.nu puts this dir
 # first in PATH for makepkg only; pacman-key and pacman keep using GnuPG.
 RUN mkdir -p /usr/local/lib/sequoia-gpg && ln -s /usr/bin/gpg-sq /usr/local/lib/sequoia-gpg/gpg
