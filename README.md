@@ -82,7 +82,7 @@ pacman only trusts the fingerprint you lsign, so a swapped `repo.pgp` on the hos
 Server = https://pkgs.fermino.me/archlinux/aarch64-v8.2
 ```
 
-The folder picks the variant. Plain targets can use `Server = https://pkgs.fermino.me/archlinux/$arch`.
+The folder is the target name and picks the variant: `x86_64`, `aarch64-v8.0` or `aarch64-v8.2`.
 
 ## Adding a target
 

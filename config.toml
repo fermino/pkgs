@@ -10,15 +10,18 @@ remote = "repo:pkgs.fermino.me"
 # pacman.conf so a package can depend on one built in an earlier run.
 # public_url = "https://pkgs.fermino.me/archlinux"
 
-# Build targets. `arch` is the pacman arch the packages carry; variants of one arch
+# Build targets. The name is the hosted folder; aarch64 ones carry the ISA level they build for.
+# `arch` is the pacman arch the packages carry; variants of one arch
 # differ only by makepkg flags and their folder. `image` is the builder image tag.
 # `makepkg_conf` is written to /etc/makepkg.conf.d/50-target.conf (bash, sourced by makepkg).
+
 [targets.x86_64]
 arch = "x86_64"
 runner = "ubuntu-24.04"
 image = "x86_64"
 
-[targets.aarch64]
+# ARMv8.0: the image's default -march=armv8-a
+[targets."aarch64-v8.0"]
 arch = "aarch64"
 runner = "ubuntu-24.04-arm"
 image = "aarch64"
