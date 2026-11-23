@@ -1,0 +1,47 @@
+# pacman repo name: clients use [myrepo], files are myrepo.db, myrepo.files, ...
+repo = "myrepo"
+
+# rclone remote:path (from the RCLONE_CONFIG secret), or a plain local path.
+# Packages go to <remote>/archlinux/<target>/
+remote = "repo:pacman"
+
+# Optional public base URL of <remote>/archlinux. If set, build jobs add the hosted repo to
+# pacman.conf so a package can depend on one built in an earlier run.
+# public_url = "https://pkgs.fermino.me/archlinux"
+
+# Build targets. `arch` is the pacman arch the packages carry; variants of one arch
+# differ only by makepkg flags and their folder. `image` is the builder image tag.
+# `makepkg_conf` is written to /etc/makepkg.conf.d/50-target.conf (bash, sourced by makepkg).
+[targets.x86_64]
+arch = "x86_64"
+runner = "ubuntu-24.04"
+image = "x86_64"
+
+[targets.aarch64]
+arch = "aarch64"
+runner = "ubuntu-24.04-arm"
+image = "aarch64"
+
+[targets."aarch64-v8.2"]
+arch = "aarch64"
+runner = "ubuntu-24.04-arm"
+image = "aarch64"
+makepkg_conf = '''
+CFLAGS="$(sed "s/-march=[^ ]*/-march=armv8.2-a/" <<<"$CFLAGS")"
+CXXFLAGS="$(sed "s/-march=[^ ]*/-march=armv8.2-a/" <<<"$CXXFLAGS")"
+RUSTFLAGS="$RUSTFLAGS -C target-feature=+v8.2a"
+'''
+
+# Git repos holding a PKGBUILD + .SRCINFO, built in this order.
+#   url:     clone URL (required)
+#   path:    subdirectory with the PKGBUILD (default: repo root)
+#   ref:     branch or tag to clone (default: the remote's default branch)
+#   targets: build only for these targets (default: every target the PKGBUILD's arch=() allows)
+#[[sources]]
+#url = "https://aur.archlinux.org/nutest-git.git"
+
+# [[sources]]
+# url = "https://github.com/you/pkgbuilds.git"
+# path = "linux-rk3566"
+# ref = "main"
+# targets = ["aarch64-v8.2"]
