@@ -37,8 +37,9 @@ RUSTFLAGS="$RUSTFLAGS -C target-feature=+v8.2a"
 #   path:    subdirectory with the PKGBUILD (default: repo root)
 #   ref:     branch or tag to clone (default: the remote's default branch)
 #   targets: build only for these targets (default: every target the PKGBUILD's arch=() allows)
-#[[sources]]
-#url = "https://aur.archlinux.org/nutest-git.git"
+
+[[sources]]
+url = "https://github.com/fermino/linux-rpi.git"
 
 # [[sources]]
 # url = "https://github.com/you/pkgbuilds.git"
