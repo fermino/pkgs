@@ -1,5 +1,5 @@
 # pacman repo name: clients use [myrepo], files are myrepo.db, myrepo.files, ...
-repo = "myrepo"
+repo = "fermino"
 
 # rclone remote:path, or a plain local path. CI defines the `repo` remote as B2 (see build.yml),
 # so this is repo:<bucket>.
