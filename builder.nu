@@ -3,7 +3,8 @@
 #
 #   nu builder.nu plan [--force]   check sources against the hosted repo, write work/plan.nuon
 #   nu builder.nu build <target>   build the plan's packages for one target (root, inside the builder image)
-#   nu builder.nu publish          sign, repo-add/remove, upload, delete stale files
+#   nu builder.nu publish          sign, repo-add/remove, upload, delete stale files, then index
+#   nu builder.nu index            write browsable index.html listings into the remote
 #
 # Env: BUILDER_CONFIG (default ./config.toml), WORK (default ./work), REMOTE (overrides config),
 #      RCLONE_CONFIG / RCLONE_CONFIG_<NAME>_* (read by rclone), SIGNING_KEY (path to the sq secret key, publish only).
@@ -52,12 +53,18 @@ def sign [key: string, file: string] {
     ^sq --home=none --overwrite sign --signer-file $key --binary --signature-file $"($file).sig" $file err> /dev/null
 }
 
-# File names in a remote target dir; [] if the dir doesn't exist yet.
-def remote-ls [cfg: record, target: string] {
-    let r = ^rclone lsjson --files-only (remote $cfg $target) | complete
+# `rclone lsjson` records for a remote dir; [] if the dir doesn't exist yet.
+def remote-entries [path: string, --files-only] {
+    let flags = if $files_only { [--files-only] } else { [] }
+    let r = ^rclone lsjson ...$flags $path | complete
     if $r.exit_code == 3 { return [] }
     if $r.exit_code != 0 { error make { msg: $"rclone lsjson failed: ($r.stderr)" } }
-    $r.stdout | from json | get -o Name | default []
+    $r.stdout | from json
+}
+
+# File names in a remote target dir; [] if the dir doesn't exist yet.
+def remote-ls [cfg: record, target: string] {
+    remote-entries (remote $cfg $target) --files-only | get -o Name | default []
 }
 
 def read-db [path: string] {
@@ -294,6 +301,26 @@ def "main publish" [--key: string] {
         for f in $stale { ^rclone deletefile (remote $cfg $t $f) }
         print $"added: ($files | where {|f| not ($f | str ends-with .sig) } | path basename | length), removed: ($gone | length), deleted files: ($stale | length)"
     }
+    main index
+}
+
+# Write an index.html into the remote root, <distro>/ and every target dir, so the repo can be browsed.
+def "main index" [] {
+    let cfg = config
+    let stage = work index
+    mkdir $stage
+    # deepest first: writing a target's index.html creates its folder, which the parent listing should show
+    let dirs = [
+        ...($cfg.targets | columns | each {|t| { path: (remote $cfg $t), title: $"/($DISTRO)/($t)/", parent: true } })
+        { path: (remote $cfg), title: $"/($DISTRO)/", parent: true }
+        { path: $cfg.remote, title: '/', parent: false }
+    ]
+    for d in $dirs {
+        let f = $stage | path join 'index.html'
+        remote-entries $d.path | index-html $d.title --parent=$d.parent | save -f $f
+        ^rclone copyto $f $"($d.path)/index.html"
+    }
+    print $"indexed ($dirs | length) folders"
 }
 
 def main [] { help main }

@@ -3,7 +3,7 @@
 Builds Arch packages from a list of git repos (PKGBUILD + .SRCINFO) for several targets and hosts them as signed pacman repos on any rclone-reachable storage.
 
 - **`config.toml`**: repo name, rclone remote, targets, sources.
-- **`builder.nu`**: `plan` / `build` / `publish`, written in nushell. The pure logic lives in **`lib.nu`** and is unit-tested in `tests/`.
+- **`builder.nu`**: `plan` / `build` / `publish` / `index`, written in nushell. The pure logic lives in **`lib.nu`** and is unit-tested in `tests/`.
 - **GitHub Actions**: `build.yml` runs every 3 hours, on manual dispatch (with `force`) and on pushes to `config.toml`. `images.yml` builds the builder images weekly. `test.yml` runs the tests.
 
 ## How it works
@@ -15,6 +15,7 @@ plan (x86_64)                         build <target> (matrix, native runners)   
   and state (sqv vs keys/repo.pgp)    - earlier builds available as deps          - sign db, files, state
 - git ls-remote for -git sources      - artifact: packages + built.nuon           - upload pkgs, then metadata
 - decide what to build / remove                                                   - delete unreferenced files
+                                                                                  - write index.html listings
 ```
 
 **When does a source get built?**
@@ -34,13 +35,17 @@ plan (x86_64)                         build <target> (matrix, native runners)   
 
 ```
 <remote>/repo.pgp                                 public signing key
+<remote>/index.html, <remote>/archlinux/index.html folder listings
 <remote>/archlinux/<target>/<repo>.db{,.sig}
 <remote>/archlinux/<target>/<repo>.files{,.sig}
 <remote>/archlinux/<target>/<repo>.state.nuon{,.sig}
 <remote>/archlinux/<target>/*.pkg.tar.zst{,.sig}
+<remote>/archlinux/<target>/index.html
 ```
 
 Packages sit under a distro folder (`archlinux/`), so other distros can go next to it later. The remote's root is served at https://pkgs.fermino.me/.
+
+**Browsing.** B2 can't list folders, so every `publish` ends by running `index`. It writes a static `index.html` into each target folder, `archlinux/` and the root, listing that folder's files (size and mtime from `rclone lsjson`). Cleanup only touches package files, so the listings are never deleted.
 
 ## Setup
 
@@ -53,8 +58,13 @@ Packages sit under a distro folder (`archlinux/`), so other distros can go next 
    ```
    Commit `keys/repo.pgp`. Put the contents of `signing.key` in the `SIGNING_KEY` repository secret (armored text is fine). Keep `signing.key` and `signing.rev` somewhere safe, not in the repo. sq keys expire after 3 years by default (`--expiration` changes that). `publish` refuses to run if the key doesn't match `keys/repo.pgp`.
 2. **Storage** (Backblaze B2): create a bucket and an application key restricted to it (read and write). Put the key ID in the `B2_KEY_ID` secret and the key in `B2_APPLICATION_KEY`. Set `remote` in `config.toml` to `repo:<bucket>`. The workflow defines the rclone remote `repo` with `RCLONE_CONFIG_REPO_*` env vars on the `plan` and `publish` steps only, so build jobs never see the key. It sets `hard_delete`, so stale packages are deleted rather than hidden. Overwriting `myrepo.db` and friends still keeps old versions, so set the bucket's lifecycle to keep only the last version. Another backend works too: change the `RCLONE_CONFIG_REPO_*` vars in `build.yml` (see `rclone help backend <name>` for the options; passwords must be `rclone obscure`d).
-3. **Images**: push to `master`, or run the `images` workflow manually. It publishes `ghcr.io/<owner>/<repo>-archlinux:{x86_64,aarch64}`. The aarch64 image is built from the Arch aarch64 port bootstrap on arch-linux-repo.drzee.net. A target's `image` in `config.toml` must be one of those tags.
-4. Edit `config.toml` (repo name, targets, sources), push, and run `build`.
+3. **Browsing** (Cloudflare in front of B2): B2 serves `index.html` only when it's asked for by name. In the zone's URL rewrite Transform Rules, add a rule for folder URLs:
+   - When: `ends_with(http.request.uri.path, "/")`
+   - Path, dynamic: `concat("/file/<bucket>", http.request.uri.path, "index.html")`
+
+   Add the condition `not ends_with(http.request.uri.path, "/")` to the existing rule that prefixes `/file/<bucket>`, so exactly one of the two rules matches each request. Optionally add a redirect rule from `/archlinux` to `/archlinux/` (and the same for each target) so links without the slash work too. To fill the pages in right away instead of waiting for the next publish, run `nu builder.nu index` with the remote set up (see [Running locally](#running-locally)).
+4. **Images**: push to `master`, or run the `images` workflow manually. It publishes `ghcr.io/<owner>/<repo>-archlinux:{x86_64,aarch64}`. The aarch64 image is built from the Arch aarch64 port bootstrap on arch-linux-repo.drzee.net. A target's `image` in `config.toml` must be one of those tags.
+5. Edit `config.toml` (repo name, targets, sources), push, and run `build`.
 
 GitHub's `ubuntu-24.04-arm` runners are free for public repositories. They're Neoverse-class, so they also run ARMv8.2 builds and their `check()`s.
 

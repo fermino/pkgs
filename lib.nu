@@ -167,3 +167,56 @@ export def next-state [built: list, keep: list]: record -> record {
     let merged = $built | reduce -f $state {|b acc| $acc | upsert $b.pkgbase { tree: $b.tree, heads: $b.heads } }
     $merged | transpose k v | where k in $keep | reduce -f {} {|it acc| $acc | insert $it.k $it.v }
 }
+
+# --- folder listings ---
+
+def html-escape []: string -> string {
+    $in | str replace -a '&' '&amp;' | str replace -a '<' '&lt;' | str replace -a '>' '&gt;' | str replace -a '"' '&quot;'
+}
+
+# Percent-encode a path segment, keeping RFC 3986 unreserved chars plus `:`, `@` and `+`.
+def href-encode []: string -> string {
+    $in | split chars | each {|c|
+        if ($c =~ '^[A-Za-z0-9._~:@+-]$') { $c } else {
+            $c | encode utf-8 | encode hex | split chars | chunks 2 | each { $"%($in | str join)" } | str join
+        }
+    } | str join
+}
+
+# HTML listing of one remote folder.
+#   input: `rclone lsjson` records ({ Name, Size, ModTime, IsDir })
+export def index-html [title: string, --parent]: list -> string {
+    let entries = $in | where Name != 'index.html' | sort-by -c {|a b|
+        if $a.IsDir != $b.IsDir { $a.IsDir } else { $a.Name < $b.Name }
+    }
+    let rows = $entries | each {|e|
+        let name = if $e.IsDir { $"($e.Name)/" } else { $e.Name }
+        # `./` so a name like `foo-1:2.0-1-any.pkg.tar.zst` isn't read as a URL scheme
+        let href = $"./($e.Name | href-encode)(if $e.IsDir { '/' } else { '' })"
+        let size = if $e.IsDir { '-' } else { $e.Size | into filesize | into string }
+        let time = if $e.IsDir { '-' } else { $e.ModTime | into datetime | date to-timezone UTC | format date '%Y-%m-%d %H:%M' }
+        $"<tr><td><a href=\"($href | html-escape)\">($name | html-escape)</a></td><td>($size)</td><td>($time)</td></tr>"
+    }
+    let rows = if $parent { ['<tr><td><a href="../">../</a></td><td></td><td></td></tr>'] ++ $rows } else { $rows }
+    let title = $title | html-escape
+    [
+        '<!DOCTYPE html>'
+        '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        $"<title>Index of ($title)</title>"
+        '<style>'
+        ':root { color-scheme: light dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; }'
+        'body { max-width: 72rem; margin: 2rem auto; padding: 0 1rem; }'
+        'h1 { font-size: 1.2rem; font-weight: 600; }'
+        'table { border-collapse: collapse; width: 100%; }'
+        'th, td { text-align: left; padding: .25rem 1rem .25rem 0; white-space: nowrap; }'
+        'th { border-bottom: 1px solid; opacity: .7; font-weight: 600; }'
+        'td:first-child { white-space: normal; word-break: break-all; }'
+        'td:nth-child(2), th:nth-child(2) { text-align: right; }'
+        '</style></head><body>'
+        $"<h1>Index of ($title)</h1>"
+        '<table><thead><tr><th>Name</th><th>Size</th><th>Modified (UTC)</th></tr></thead><tbody>'
+        ...$rows
+        '</tbody></table></body></html>'
+        ''
+    ] | str join "\n"
+}

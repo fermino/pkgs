@@ -267,7 +267,7 @@ def unreferenced-files [] {
         a-1-2-x86_64.pkg.tar.zst a-1-2-x86_64.pkg.tar.zst.sig
         gone-1-1-any.pkg.tar.xz
         orphan-1-1-any.pkg.tar.zst.sig
-        README
+        README index.html
     ]
     assert equal ($files | unreferenced [a-1-2-x86_64.pkg.tar.zst]) [
         a-1-1-x86_64.pkg.tar.zst a-1-1-x86_64.pkg.tar.zst.sig gone-1-1-any.pkg.tar.xz orphan-1-1-any.pkg.tar.zst.sig
@@ -281,4 +281,41 @@ def state-merge-and-drop [] {
     let state = { a: { tree: t1, heads: { u: x } }, b: { tree: t1, heads: {} }, gone: { tree: t0, heads: {} } }
     let s = $state | next-state [{ pkgbase: a, tree: t2, heads: { u: y } } { pkgbase: c, tree: t3, heads: {} }] [a b c]
     assert equal $s { a: { tree: t2, heads: { u: y } }, b: { tree: t1, heads: {} }, c: { tree: t3, heads: {} } }
+}
+
+# --- index-html ---
+
+def entry [name: string, --dir] {
+    { Name: $name, Size: (if $dir { -1 } else { 1234 }), ModTime: '2026-11-23T19:17:24.5-03:00', IsDir: $dir }
+}
+
+def rows []: string -> list { $in | lines | where {|l| $l starts-with '<tr><td>' } }
+
+@test
+def index-dirs-first-and-skips-itself [] {
+    let html = [(entry b.pkg.tar.zst) (entry index.html) (entry x86_64 --dir) (entry a.pkg.tar.zst)] | index-html '/archlinux/'
+    assert equal ($html | rows) [
+        '<tr><td><a href="./x86_64/">x86_64/</a></td><td>-</td><td>-</td></tr>'
+        '<tr><td><a href="./a.pkg.tar.zst">a.pkg.tar.zst</a></td><td>1.2 kB</td><td>2026-11-23 22:17</td></tr>'
+        '<tr><td><a href="./b.pkg.tar.zst">b.pkg.tar.zst</a></td><td>1.2 kB</td><td>2026-11-23 22:17</td></tr>'
+    ]
+    assert str contains $html '<title>Index of /archlinux/</title>'
+}
+
+@test
+def index-escapes-names [] {
+    let row = [(entry 'a<&"é')] | index-html '/' | rows | first
+    assert str contains $row '<a href="./a%3C%26%22%C3%A9">a&lt;&amp;&quot;é</a>'
+}
+
+@test
+def index-epoch-href-is-relative [] {
+    let row = [(entry 'foo-1:2.0+x-1-any.pkg.tar.zst')] | index-html '/' | rows | first
+    assert str contains $row 'href="./foo-1:2.0+x-1-any.pkg.tar.zst"'
+}
+
+@test
+def index-parent-row [] {
+    assert equal ([] | index-html '/' | rows) []
+    assert equal ([] | index-html '/archlinux/' --parent | rows) ['<tr><td><a href="../">../</a></td><td></td><td></td></tr>']
 }
