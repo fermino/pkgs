@@ -50,7 +50,9 @@ def verify [file: string] {
 }
 
 def sign [key: string, file: string] {
-    ^sq --home=none --overwrite sign --signer-file $key --binary --signature-file $"($file).sig" $file err> /dev/null
+    # `complete` keeps sq's message; on its own, a failing external exits without one
+    let r = ^sq --home=none --overwrite sign --signer-file $key --binary --signature-file $"($file).sig" $file | complete
+    if $r.exit_code != 0 { error make { msg: $"signing ($file | path basename) failed: ($r.stderr | str trim)" } }
 }
 
 # `rclone lsjson` records for a remote dir; [] if the dir doesn't exist yet.
@@ -244,16 +246,22 @@ def "main build" [target: string] {
 # Sign, update dbs and state, upload, then delete files the dbs no longer reference.
 def "main publish" [--key: string] {
     let cfg = config
-    let plan = open (work plan.nuon)
     let key = $key | default $env.SIGNING_KEY?
     if $key == null { error make { msg: 'no signing key: pass --key or set SIGNING_KEY' } }
+    if not ($key | path exists) or (open --raw $key | str trim | is-empty) {
+        error make { msg: $"signing key ($key) is missing or empty; in CI, check that the SIGNING_KEY secret is set" }
+    }
 
     # the key must match keys/repo.pgp, or the next plan can't verify what we upload
     let probe = mktemp --tmpdir 'builder-probe.XXXXXX'
     sign $key $probe
-    verify $probe
+    try { verify $probe } catch {|e|
+        rm -f $probe $"($probe).sig"
+        error make { msg: $"signing key doesn't match keys/repo.pgp: ($e.msg)" }
+    }
     rm -f $probe $"($probe).sig"
 
+    let plan = open (work plan.nuon)
     let built = glob (work out '*' built.nuon) | each {|f|
         open $f | insert dir ($f | path dirname)
     } | flatten

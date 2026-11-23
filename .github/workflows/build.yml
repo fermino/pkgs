@@ -96,6 +96,7 @@ jobs:
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
+          if [ -z "$SIGNING_KEY" ]; then echo '::error::The SIGNING_KEY secret is not set'; exit 1; fi
           mkdir -p "$RUNNER_TEMP/secrets"
           printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/secrets/signing.key"
       - run: ./in-builder.sh x86_64 nu builder.nu publish
