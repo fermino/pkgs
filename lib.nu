@@ -102,6 +102,11 @@ export def targets-for [targets: record, only?: list]: record -> list {
     | get name
 }
 
+# Hosted folder of a target under the distro folder: <arch>/<name>.
+export def target-dir [targets: record, name: string]: nothing -> string {
+    $"(($targets | get $name).arch)/($name)"
+}
+
 # Why a source must be rebuilt for a target, or null if it's up to date.
 #   db:    table of { name, version, filename } from the target's db
 #   state: the target's state record, keyed by pkgbase: { tree, heads }

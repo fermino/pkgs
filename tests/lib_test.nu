@@ -35,9 +35,9 @@ pkgname = bar-git
 '
 
 const TARGETS = {
-    x86_64: { arch: x86_64 }
-    aarch64: { arch: aarch64 }
-    aarch64-v8.2: { arch: aarch64 }
+    x86-64: { arch: x86_64 }
+    armv8-a: { arch: aarch64 }
+    armv8.2-a: { arch: aarch64 }
 }
 
 # --- parse-srcinfo ---
@@ -135,19 +135,27 @@ def is-vcs-detection [] {
 
 @test
 def targets-by-arch [] {
-    assert equal ($SPLIT | parse-srcinfo | targets-for $TARGETS) [x86_64 aarch64 aarch64-v8.2]
+    assert equal ($SPLIT | parse-srcinfo | targets-for $TARGETS) [x86-64 armv8-a armv8.2-a]
     let x86 = "pkgbase = a\n\tpkgver = 1\n\tpkgrel = 1\n\tarch = x86_64\n\npkgname = a\n" | parse-srcinfo
-    assert equal ($x86 | targets-for $TARGETS) [x86_64]
+    assert equal ($x86 | targets-for $TARGETS) [x86-64]
 }
 
 @test
 def targets-any-and-override [] {
     let i = $VCS | parse-srcinfo
-    assert equal ($i | targets-for $TARGETS) [x86_64 aarch64 aarch64-v8.2]
-    assert equal ($i | targets-for $TARGETS [aarch64-v8.2]) [aarch64-v8.2]
+    assert equal ($i | targets-for $TARGETS) [x86-64 armv8-a armv8.2-a]
+    assert equal ($i | targets-for $TARGETS [armv8.2-a]) [armv8.2-a]
     # an override can't add a target the PKGBUILD doesn't support
     let x86 = "pkgbase = a\n\tpkgver = 1\n\tpkgrel = 1\n\tarch = x86_64\n\npkgname = a\n" | parse-srcinfo
-    assert equal ($x86 | targets-for $TARGETS [aarch64]) []
+    assert equal ($x86 | targets-for $TARGETS [armv8-a]) []
+}
+
+# --- target-dir ---
+
+@test
+def target-dir-nests-under-arch [] {
+    assert equal (target-dir $TARGETS x86-64) 'x86_64/x86-64'
+    assert equal (target-dir $TARGETS armv8.2-a) 'aarch64/armv8.2-a'
 }
 
 # --- needs-build ---
@@ -232,9 +240,9 @@ def plan-arch-specific [] {
 
 @test
 def plan-any-builds-once [] {
-    let p = [(src a [any] [x86_64 aarch64 aarch64-v8.2] { x86_64: null, aarch64: 'v', aarch64-v8.2: 'v' })] | make-plan [x86_64 aarch64 aarch64-v8.2]
-    assert equal $p.builds { x86_64: [], aarch64: [a], aarch64-v8.2: [] }
-    assert equal $p.publish { x86_64: [], aarch64: [a], aarch64-v8.2: [a] }
+    let p = [(src a [any] [x86-64 armv8-a armv8.2-a] { x86-64: null, armv8-a: 'v', armv8.2-a: 'v' })] | make-plan [x86-64 armv8-a armv8.2-a]
+    assert equal $p.builds { x86-64: [], armv8-a: [a], armv8.2-a: [] }
+    assert equal $p.publish { x86-64: [], armv8-a: [a], armv8.2-a: [a] }
 }
 
 @test

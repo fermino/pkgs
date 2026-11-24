@@ -15,7 +15,7 @@ const ROOT = path self | path dirname
 const CERT = path self | path dirname | path join keys repo.pgp
 # gpg -> gpg-sq shim from the image, so makepkg verifies sources with Sequoia
 const SQ_GPG = '/usr/local/lib/sequoia-gpg'
-# Hosted layout: <remote>/<DISTRO>/<target>/, leaving room for other distros next to it
+# Hosted layout: <remote>/<DISTRO>/<arch>/<target>/, leaving room for other distros next to it
 const DISTRO = 'archlinux'
 
 def config [] {
@@ -26,6 +26,9 @@ def config [] {
 def work [...parts: string] { $env.WORK? | default ($ROOT | path join work) | path expand | path join ...$parts }
 
 def remote [cfg: record, ...parts: string] { [$cfg.remote $DISTRO ...$parts] | str join '/' }
+
+# A target's hosted folder, or a file in it.
+def target-remote [cfg: record, target: string, ...parts: string] { remote $cfg (target-dir $cfg.targets $target) ...$parts }
 
 # Metadata files kept next to the packages: remote name -> local name (repo-add wants the .tar.zst names).
 def meta-files [repo: string] {
@@ -66,7 +69,7 @@ def remote-entries [path: string, --files-only] {
 
 # File names in a remote target dir; [] if the dir doesn't exist yet.
 def remote-ls [cfg: record, target: string] {
-    remote-entries (remote $cfg $target) --files-only | get -o Name | default []
+    remote-entries (target-remote $cfg $target) --files-only | get -o Name | default []
 }
 
 def read-db [path: string] {
@@ -84,10 +87,10 @@ def fetch-meta [cfg: record, target: string, dir: string] {
     let names = remote-ls $cfg $target
     for m in (meta-files $cfg.repo) {
         if $m.remote not-in $names { continue }
-        if $"($m.remote).sig" not-in $names { error make { msg: $"($target)/($m.remote) has no signature" } }
+        if $"($m.remote).sig" not-in $names { error make { msg: $"(target-dir $cfg.targets $target)/($m.remote) has no signature" } }
         let local = $dir | path join $m.local
-        ^rclone copyto (remote $cfg $target $m.remote) $local
-        ^rclone copyto (remote $cfg $target $"($m.remote).sig") $"($local).sig"
+        ^rclone copyto (target-remote $cfg $target $m.remote) $local
+        ^rclone copyto (target-remote $cfg $target $"($m.remote).sig") $"($local).sig"
         verify $local
     }
     let state = $dir | path join $"($cfg.repo).state.nuon"
@@ -208,7 +211,7 @@ def "main build" [target: string] {
         ^pacman-key --add $CERT
         let fpr = out sq --home=none inspect $CERT | parse -r 'Fingerprint: (?<f>[0-9A-F]+)' | get 0.f
         ^pacman-key --lsign-key $fpr
-        add-repo $cfg.repo $"($cfg.public_url | str trim -r -c '/')/($target)" Required
+        add-repo $cfg.repo $"($cfg.public_url | str trim -r -c '/')/(target-dir $cfg.targets $target)" Required
     }
     ^pacman -Syu --noconfirm
 
@@ -295,7 +298,7 @@ def "main publish" [--key: string] {
         $m.state | next-state $done $keep | to nuon --indent 2 | save -f ($stage | path join $"($cfg.repo).state.nuon")
 
         # packages first, then the metadata pointing at them, then cleanup
-        if ($files | is-not-empty) { ^rclone copy $pkgs (remote $cfg $t) }
+        if ($files | is-not-empty) { ^rclone copy $pkgs (target-remote $cfg $t) }
         let up = $stage | path join up
         mkdir $up
         for mf in (meta-files $cfg.repo) {
@@ -303,23 +306,24 @@ def "main publish" [--key: string] {
             cp ($stage | path join $mf.local) $f
             sign $key $f
         }
-        ^rclone copy $up (remote $cfg $t)
+        ^rclone copy $up (target-remote $cfg $t)
 
         let stale = remote-ls $cfg $t | unreferenced (read-db $db | get -o filename | default [])
-        for f in $stale { ^rclone deletefile (remote $cfg $t $f) }
+        for f in $stale { ^rclone deletefile (target-remote $cfg $t $f) }
         print $"added: ($files | where {|f| not ($f | str ends-with .sig) } | path basename | length), removed: ($gone | length), deleted files: ($stale | length)"
     }
     main index
 }
 
-# Write an index.html into the remote root, <distro>/ and every target dir, so the repo can be browsed.
+# Write an index.html into the remote root, <distro>/, every <arch>/ and every target dir, so the repo can be browsed.
 def "main index" [] {
     let cfg = config
     let stage = work index
     mkdir $stage
     # deepest first: writing a target's index.html creates its folder, which the parent listing should show
     let dirs = [
-        ...($cfg.targets | columns | each {|t| { path: (remote $cfg $t), title: $"/($DISTRO)/($t)/", parent: true } })
+        ...($cfg.targets | columns | each {|t| let d = target-dir $cfg.targets $t; { path: (remote $cfg $d), title: $"/($DISTRO)/($d)/", parent: true } })
+        ...($cfg.targets | values | get arch | uniq | each {|a| { path: (remote $cfg $a), title: $"/($DISTRO)/($a)/", parent: true } })
         { path: (remote $cfg), title: $"/($DISTRO)/", parent: true }
         { path: $cfg.remote, title: '/', parent: false }
     ]

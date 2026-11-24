@@ -36,16 +36,17 @@ plan (x86_64)                         build <target> (matrix, native runners)   
 ```
 <remote>/repo.pgp                                 public signing key
 <remote>/index.html, <remote>/archlinux/index.html folder listings
-<remote>/archlinux/<target>/<repo>.db{,.sig}
-<remote>/archlinux/<target>/<repo>.files{,.sig}
-<remote>/archlinux/<target>/<repo>.state.nuon{,.sig}
-<remote>/archlinux/<target>/*.pkg.tar.zst{,.sig}
-<remote>/archlinux/<target>/index.html
+<remote>/archlinux/<arch>/index.html
+<remote>/archlinux/<arch>/<target>/<repo>.db{,.sig}
+<remote>/archlinux/<arch>/<target>/<repo>.files{,.sig}
+<remote>/archlinux/<arch>/<target>/<repo>.state.nuon{,.sig}
+<remote>/archlinux/<arch>/<target>/*.pkg.tar.zst{,.sig}
+<remote>/archlinux/<arch>/<target>/index.html
 ```
 
-Packages sit under a distro folder (`archlinux/`), so other distros can go next to it later. The remote's root is served at https://pkgs.fermino.me/.
+Packages sit under a distro folder (`archlinux/`), so other distros can go next to it later. Below it, a target's folder is its pacman `arch`, then its name (the `-march` level it builds for), e.g. `aarch64/armv8.2-a/`. The remote's root is served at https://pkgs.fermino.me/.
 
-**Browsing.** B2 can't list folders, so every `publish` ends by running `index`. It writes a static `index.html` into each target folder, `archlinux/` and the root, listing that folder's files (size and mtime from `rclone lsjson`). Cleanup only touches package files, so the listings are never deleted.
+**Browsing.** B2 can't list folders, so every `publish` ends by running `index`. It writes a static `index.html` into each target folder, each `<arch>/` folder, `archlinux/` and the root, listing that folder's files (size and mtime from `rclone lsjson`). Cleanup only touches package files, so the listings are never deleted.
 
 ## Setup
 
@@ -62,7 +63,7 @@ Packages sit under a distro folder (`archlinux/`), so other distros can go next 
    - When: `ends_with(http.request.uri.path, "/")`
    - Path, dynamic: `concat("/file/<bucket>", http.request.uri.path, "index.html")`
 
-   Add the condition `not ends_with(http.request.uri.path, "/")` to the existing rule that prefixes `/file/<bucket>`, so exactly one of the two rules matches each request. Optionally add a redirect rule from `/archlinux` to `/archlinux/` (and the same for each target) so links without the slash work too. To fill the pages in right away instead of waiting for the next publish, run `nu builder.nu index` with the remote set up (see [Running locally](#running-locally)).
+   Add the condition `not ends_with(http.request.uri.path, "/")` to the existing rule that prefixes `/file/<bucket>`, so exactly one of the two rules matches each request. Optionally add a redirect rule from `/archlinux` to `/archlinux/` (and the same for each arch and target folder) so links without the slash work too. To fill the pages in right away instead of waiting for the next publish, run `nu builder.nu index` with the remote set up (see [Running locally](#running-locally)).
 4. **Images**: push to `master`, or run the `images` workflow manually. It publishes `ghcr.io/<owner>/<repo>-archlinux:{x86_64,aarch64}`. The aarch64 image is built from the Arch aarch64 port bootstrap on arch-linux-repo.drzee.net. A target's `image` in `config.toml` must be one of those tags.
 5. Edit `config.toml` (repo name, targets, sources), push, and run `build`.
 
@@ -89,17 +90,17 @@ pacman only trusts the fingerprint you lsign, so a swapped `repo.pgp` on the hos
 ```ini
 # /etc/pacman.conf
 [myrepo]
-Server = https://pkgs.fermino.me/archlinux/aarch64-v8.2
+Server = https://pkgs.fermino.me/archlinux/$arch/armv8.2-a
 ```
 
-The folder is the target name and picks the variant: `x86_64`, `aarch64-v8.0` or `aarch64-v8.2`.
+pacman fills in `$arch`. The last folder is the target and picks the variant: `x86-64` (on `x86_64`), `armv8-a` or `armv8.2-a` (on `aarch64`).
 
 ## Adding a target
 
-Add a `[targets.<name>]` table to `config.toml`:
+Add a `[targets.<name>]` table to `config.toml`. Name it after the `-march` level it builds for; it's hosted at `archlinux/<arch>/<name>/`:
 
 ```toml
-[targets."x86_64-v3"]
+[targets."x86-64-v3"]
 arch = "x86_64"
 runner = "ubuntu-24.04"
 image = "x86_64"
@@ -132,7 +133,7 @@ REMOTE=/mnt/pacman nu builder.nu plan
 `build` changes `/etc/pacman.conf` and `/etc/makepkg.conf.d`, so it refuses to run outside the builder image (it checks for root). Use the image:
 
 ```bash
-./in-builder.sh x86_64 nu builder.nu build x86_64
+./in-builder.sh x86_64 nu builder.nu build x86-64
 ```
 ```bash
 SIGNING_KEY=signing.key REMOTE=/mnt/pacman nu builder.nu publish
