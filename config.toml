@@ -57,3 +57,7 @@ targets = ["armv8-a", "armv8.2-a"]
 [[sources]]
 url = "https://github.com/fermino/uboot-powkiddy-x55-rk3566.git"
 targets = ["armv8.2-a"]
+
+[[sources]]
+url = "https://github.com/fermino/trusted-firmware-a-rpi4.git"
+targets = ["armv8-a", "armv8.2-a"]
