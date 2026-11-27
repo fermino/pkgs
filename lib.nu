@@ -151,6 +151,23 @@ export def make-plan [targets: list]: list -> record {
     }
 }
 
+# Which of the run's builds a target publishes.
+#   built:  list of { id, target, ... }, every target's successful builds
+#   ids:    the plan's publish list for this target
+#   builds: the plan's builds, keyed by target
+# A source the plan built on this target comes from this target's build, never another
+# target's, even if this one failed. One built elsewhere (arch=any) comes from the target
+# that built it.
+export def builds-for [target: string, ids: list, builds: record]: list -> list {
+    let built = $in
+    $ids | each {|id|
+        let from = if $id in ($builds | get $target) { $target } else {
+            $builds | transpose t ids | where {|b| $id in $b.ids } | get -o 0.t
+        }
+        $built | where {|b| $b.id == $id and $b.target == $from } | get -o 0
+    } | compact
+}
+
 # Pkgnames in a db that no longer belong there.
 export def removals [expected: list]: any -> list {
     $in | default [] | get name | where {|n| $n not-in $expected } | uniq

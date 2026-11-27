@@ -259,6 +259,39 @@ def plan-split-package-expected [] {
     assert equal $p.expected { x86_64: [foo foo-docs], aarch64: [] }
 }
 
+# --- builds-for ---
+
+const BUILT = [
+    { id: k, target: armv8-a, files: [k-1-1-aarch64.pkg.tar.zst] }
+    { id: any, target: armv8-a, files: [any-1-1-any.pkg.tar.zst] }
+    { id: k, target: armv8.2-a, files: [k-1-1-aarch64.pkg.tar.zst] }
+]
+const BUILDS = { armv8-a: [k any], armv8.2-a: [k] }
+
+@test
+def builds-for-own-target [] {
+    let picks = $BUILT | builds-for armv8.2-a [k any] $BUILDS
+    assert equal ($picks | select id target) [{ id: k, target: armv8.2-a } { id: any, target: armv8-a }]
+}
+
+@test
+def builds-for-first-target [] {
+    let picks = $BUILT | builds-for armv8-a [k any] $BUILDS
+    assert equal ($picks | select id target) [{ id: k, target: armv8-a } { id: any, target: armv8-a }]
+}
+
+@test
+def builds-for-failed-not-borrowed [] {
+    # k failed on armv8.2-a: armv8-a's build must not stand in for it
+    let built = $BUILT | where target == armv8-a
+    assert equal ($built | builds-for armv8.2-a [k any] $BUILDS | get id) [any]
+}
+
+@test
+def builds-for-any-failed [] {
+    assert equal ([] | builds-for armv8.2-a [any] $BUILDS) []
+}
+
 # --- removals / unreferenced ---
 
 @test

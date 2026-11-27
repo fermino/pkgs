@@ -238,7 +238,7 @@ def "main build" [target: string] {
         print '::endgroup::'
         { id: $id, ok: ($ok and ($files | is-not-empty)), files: $files }
     }
-    $results | where ok | select id files | to nuon | save -f ($out | path join built.nuon)
+    $results | where ok | select id files | insert target $target | to nuon | save -f ($out | path join built.nuon)
     let failed = $results | where not ok | get id
     if ($failed | is-not-empty) {
         print -e $"failed: ($failed | str join ', ')"
@@ -272,7 +272,8 @@ def "main publish" [--key: string] {
     ^rclone copyto $CERT ([$cfg.remote repo.pgp] | str join '/')
 
     for t in ($cfg.targets | columns) {
-        let ids = $plan.publish | get $t | where {|id| $id in ($built | get -o id | default []) }
+        let picks = $built | builds-for $t ($plan.publish | get $t) $plan.builds
+        let ids = $picks | get -o id | default []
         if ($ids | is-empty) and ($plan.removals | get $t | is-empty) { continue }
         print $"== ($t)"
         let stage = work publish $t
@@ -281,8 +282,7 @@ def "main publish" [--key: string] {
 
         let pkgs = $stage | path join pkgs
         mkdir $pkgs
-        let files = $ids | each {|id|
-            let b = $built | where id == $id | first
+        let files = $picks | each {|b|
             $b.files | each {|f| cp ($b.dir | path join $f) $pkgs; $pkgs | path join $f }
         } | flatten
         for f in $files { sign $key $f }

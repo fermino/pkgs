@@ -23,7 +23,7 @@ plan (x86_64)                         build <target> (matrix, native runners)   
 - **VCS packages** (any `git+`/`svn+`/... source without a pinned `#tag=`/`#commit=`): when a package is missing, when the packaging directory's git tree changed, or when `git ls-remote` reports a new commit for a tracked `git+` source (`#branch=` respected). The commits a package was built from are kept in `<repo>.state.nuon` next to the db, signed like everything else. Nothing is cloned or run from upstream at plan time.
 - **`force`**: everything.
 
-**Targets.** A source builds for every configured target its `arch=()` allows. A source's `targets: [...]` narrows that. `arch=any` packages are built once, on the first target that needs them, and published to every target that needs them.
+**Targets.** A source builds for every configured target its `arch=()` allows. A source's `targets: [...]` narrows that. `arch=any` packages are built once, on the first target that needs them, and published to every target that needs them. Every other package is published only from its own target's build, so a build that fails on one target is never replaced by another target's.
 
 **Cleanup.** After a publish, every package file (and `.sig`) in a target folder that its db doesn't reference is deleted. That covers both old versions and sources dropped from the config, which are `repo-remove`d first.
 
