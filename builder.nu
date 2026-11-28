@@ -265,7 +265,15 @@ def "main publish" [--key: string] {
     rm -f $probe $"($probe).sig"
 
     let plan = open (work plan.nuon)
-    let built = glob (work out '*' built.nuon) | each {|f|
+    # download-artifact unpacks several artifacts into a folder each, but a lone
+    # one straight into work/out, so the results may sit at either depth.
+    let results = glob (work out '**' built.nuon)
+    let planned = $plan.builds | values | flatten | uniq
+    # Otherwise every target is skipped and the run still passes.
+    if ($planned | is-not-empty) and ($results | is-empty) {
+        error make { msg: $"no build results \(built.nuon) under (work out), but the plan built: ($planned | str join ', ')" }
+    }
+    let built = $results | each {|f|
         open $f | insert dir ($f | path dirname)
     } | flatten
     # one signing key for every distro, so it sits at the remote's root
